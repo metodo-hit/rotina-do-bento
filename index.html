@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Rotina do Bento</title>
+  <meta name="description" content="Mamadas, sonecas e fraldas do Bento.">
+
+  <!-- Aparência de app no iPhone -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Bento">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#FAF6EF" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1B2028" media="(prefers-color-scheme: dark)">
+  <meta name="format-detection" content="telephone=no">
+
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topo">
+      <div class="topo-titulo">
+        <h1 id="titulo">Rotina do Bento</h1>
+        <p id="idade" class="topo-idade"></p>
+      </div>
+      <button id="status-sync" class="status-sync" type="button" aria-label="Estado da sincronização">
+        <span class="status-ponto"></span>
+        <span class="status-texto">…</span>
+      </button>
+    </header>
+
+    <main id="conteudo" tabindex="-1"></main>
+
+    <nav class="abas" aria-label="Navegação">
+      <button type="button" data-aba="hoje" class="ativa">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+        <span>Hoje</span>
+      </button>
+      <button type="button" data-aba="historico">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span>Histórico</span>
+      </button>
+      <button type="button" data-aba="resumo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-7"/></svg>
+        <span>Resumo</span>
+      </button>
+      <button type="button" data-aba="ajustes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+        <span>Ajustes</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="folha" class="folha-fundo" hidden>
+    <div class="folha" role="dialog" aria-modal="true" aria-labelledby="folha-titulo">
+      <div class="folha-alca" aria-hidden="true"></div>
+      <div id="folha-conteudo"></div>
+    </div>
+  </div>
+
+  <div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

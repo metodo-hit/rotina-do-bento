@@ -465,7 +465,174 @@ textarea.entrada { min-height: 80px; resize: vertical; }
 .config-linha span:last-child { font-weight: 700; text-align: right; }
 .rodape { text-align: center; color: var(--texto-2); font-size: .8rem; margin: 24px 0 8px; }
 
+/* ---------- Versão 2: comuns ---------- */
+
+.cartao.destaque { width: 100%; text-align: left; font: inherit; color: inherit; display: flex; }
+.voltar { border: 0; background: none; color: var(--azul-forte); font-weight: 700; padding: 4px 0 8px; font-size: .95rem; }
+.alerta-cartao { border-color: var(--laranja); background: var(--laranja-suave); }
+.link-acao { display: block; margin-top: 10px; border: 0; background: none; padding: 0; color: var(--laranja-forte); font-weight: 700; font-size: .9rem; text-align: left; }
+.progresso { height: 8px; border-radius: 4px; background: var(--superficie-2); overflow: hidden; margin-top: 10px; }
+.progresso i { display: block; height: 100%; background: var(--laranja); border-radius: 4px; }
+.mini { min-height: 36px; }
+.item .mini { margin-left: 6px; }
+.item.concluido .item-titulo { text-decoration: line-through; color: var(--texto-2); }
+.abas button { font-size: .68rem; }
+
+/* ---------- Barra rápida: som e timer ---------- */
+
+.rapidos { display: grid; grid-template-columns: 1.25fr 1fr; gap: 8px; margin-bottom: 12px; }
+.rapido {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+  text-align: left;
+  min-width: 0;
+}
+.rapido.som.tocando { background: var(--azul-suave); border-color: var(--azul); }
+.som-play {
+  flex: none;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--azul-forte);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+}
+:root[data-tema="escuro"] .som-play { color: #1B2028; }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .som-play { color: #1B2028; } }
+.rapido-info { display: flex; flex-direction: column; min-width: 0; border: 0; background: none; padding: 0; text-align: left; }
+.rapido-info small { font-size: .72rem; color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rapido-info b { font-size: .92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.rapido-icone { font-size: 1.4rem; flex: none; }
+.timer-rapido.ativo { background: var(--laranja-suave); border-color: var(--laranja); }
+
+.player-yt { background: var(--superficie); border: 1px solid var(--borda); border-radius: 16px; padding: 10px; margin-bottom: 12px; }
+.player-yt[hidden] { display: none; }
+.yt-topo { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: .9rem; margin-bottom: 8px; }
+.yt-topo button { border: 0; background: var(--superficie-2); border-radius: 50%; width: 32px; height: 32px; }
+.yt-video { position: relative; padding-top: 56.25%; border-radius: 10px; overflow: hidden; background: #000; }
+.yt-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* ---------- Lembretes e alarme ---------- */
+
+.lembrete-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; margin-bottom: 10px;
+  border-radius: 14px; background: var(--laranja-suave); border: 1px solid var(--laranja);
+  font-size: 1.3rem;
+}
+.lembrete-banner div { flex: 1; min-width: 0; font-size: 1rem; }
+.lembrete-banner small { display: block; color: var(--texto-2); font-size: .82rem; }
+.lembrete-banner button { border: 0; border-radius: 10px; padding: 8px 12px; background: var(--laranja-forte); color: #fff; font-weight: 800; }
+
+.alarme { position: fixed; inset: 0; z-index: 40; background: rgba(27, 32, 40, .7); display: grid; place-items: center; padding: 16px; }
+.alarme[hidden] { display: none; }
+.alarme-caixa { width: 100%; max-width: 380px; background: var(--fundo); border-radius: 22px; padding: 24px 18px; text-align: center; animation: pulso 1.2s ease-in-out infinite alternate; }
+@keyframes pulso { to { box-shadow: 0 0 0 10px rgba(201, 120, 46, .25); } }
+.alarme-icone { font-size: 3rem; }
+.alarme-rotulo { margin: 4px 0 0; color: var(--texto-2); font-weight: 700; text-transform: uppercase; font-size: .78rem; letter-spacing: .06em; }
+.alarme-caixa h2 { margin: 6px 0 16px; font-size: 1.4rem; }
+
+/* ---------- Sono ---------- */
+
+.timer-previsao { margin: -6px 0 12px; font-size: .9rem; opacity: .92; }
+.previsao-rotulo { color: var(--texto-2); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.previsao-grande { font-size: 1.5rem; font-weight: 800; margin: 4px 0 12px; }
+.previsao-grande b { color: var(--azul-forte); }
+.previsao-linhas div { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--borda); font-size: .93rem; }
+.previsao-linhas div:last-child { border-bottom: 0; }
+.previsao-linhas span { color: var(--texto-2); }
+
+.plano { list-style: none; margin: 0; padding: 0; }
+.plano-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--borda); }
+.plano-item:last-child { border-bottom: 0; }
+.plano-icone { font-size: 1.4rem; flex: none; width: 34px; text-align: center; }
+.plano-corpo { flex: 1; min-width: 0; }
+.plano-corpo b { display: block; }
+.plano-corpo small { color: var(--texto-2); font-size: .8rem; }
+.plano-hora { flex: none; font-weight: 800; font-variant-numeric: tabular-nums; font-size: .92rem; text-align: right; }
+.plano-item.estimado .plano-hora { color: var(--azul-forte); }
+.plano-item.estimado .plano-icone { opacity: .6; }
+.plano-item.andamento { background: var(--azul-suave); border-radius: 10px; padding-left: 6px; padding-right: 6px; }
+.plano-vazio { color: var(--texto-2); padding: 8px 0; }
+
+.colunas { display: flex; align-items: flex-end; gap: 6px; height: 150px; margin-top: 16px; }
+.coluna { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; min-width: 0; }
+.coluna-valor { font-size: .68rem; font-weight: 700; color: var(--texto-2); height: 16px; }
+.coluna-barra { flex: 1; width: 100%; max-width: 30px; display: flex; flex-direction: column-reverse; background: var(--superficie-2); border-radius: 8px; overflow: hidden; }
+.coluna-barra i { display: block; width: 100%; }
+.coluna-barra i.soneca { background: var(--azul); }
+.coluna-barra i.noturno { background: var(--azul-forte); }
+.coluna-dia { font-size: .66rem; color: var(--texto-2); margin-top: 4px; white-space: nowrap; }
+.coluna.hoje .coluna-barra { outline: 2px dashed var(--laranja); outline-offset: 1px; }
+
+.insight { border-left: 4px solid var(--azul); }
+.insight.alerta { border-left-color: var(--laranja); }
+.insight-topo { display: flex; gap: 8px; align-items: center; }
+.insight p { margin: 8px 0 0; }
+
+/* ---------- Agenda ---------- */
+
+.calendario { padding: 12px; }
+.cal-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 1.05rem; }
+.cal-nav { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--borda); background: var(--superficie); font-size: 1.3rem; line-height: 1; }
+.cal-nav:disabled { opacity: .35; }
+.cal-grade { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-semana { text-align: center; font-size: .72rem; font-weight: 700; color: var(--texto-2); padding: 4px 0; }
+.cal-dia { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 44px; border: 0; background: none; border-radius: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal-dia.fora { opacity: .35; }
+.cal-dia.hoje span:first-child { color: var(--laranja-forte); font-weight: 800; }
+.cal-dia.selecionado { background: var(--azul-forte); color: #fff; }
+.cal-dia.selecionado.hoje span:first-child { color: #fff; }
+:root[data-tema="escuro"] .cal-dia.selecionado { color: #1B2028; }
+@media (prefers-color-scheme: dark) { :root:not([data-tema="claro"]) .cal-dia.selecionado { color: #1B2028; } }
+.cal-pontos { display: flex; gap: 2px; height: 5px; }
+.cal-pontos i { width: 5px; height: 5px; border-radius: 50%; }
+.cal-pontos .p-saude { background: var(--laranja); }
+.cal-pontos .p-festa { background: #D9A441; }
+.cal-pontos .p-outro { background: var(--azul); }
+.cal-dia.selecionado .cal-pontos i { background: currentColor; }
+
+.vacinas { list-style: none; margin: 0; padding: 0; }
+.vacina { padding: 10px 0; border-bottom: 1px solid var(--borda); }
+.vacina:last-child { border-bottom: 0; }
+.vacina.passada { opacity: .5; }
+.vacina-topo { display: flex; justify-content: space-between; gap: 8px; }
+.vacina-topo span { color: var(--texto-2); font-variant-numeric: tabular-nums; font-size: .9rem; }
+.vacina p { margin: 4px 0 0; font-size: .86rem; color: var(--texto-2); }
+
+/* ---------- Marcos ---------- */
+
+.fase-nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: 700; color: var(--texto-2); }
+.fase-cabeca h2 { margin: 0; font-size: 1.4rem; color: var(--azul-forte); }
+.fase-faixa { margin: 2px 0 8px; color: var(--laranja-forte); font-weight: 700; }
+.fase-cabeca p { margin: 0 0 4px; }
+.marcos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.marco {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  min-height: 132px; padding: 14px 12px 12px;
+  border-radius: var(--raio); border: 1px solid var(--borda);
+  background: var(--superficie); box-shadow: var(--sombra); text-align: left;
+}
+.marco.feito { background: var(--azul-suave); border-color: var(--azul); }
+.marco-check { position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--borda); display: grid; place-items: center; font-size: .8rem; font-weight: 800; }
+.marco.feito .marco-check { background: var(--azul-forte); border-color: var(--azul-forte); color: #fff; }
+.marco-icone { font-size: 1.5rem; }
+.marco-texto { font-weight: 700; font-size: .92rem; line-height: 1.25; padding-right: 18px; }
+.marco-cat { font-size: .75rem; color: var(--texto-2); margin-top: auto; }
+.marco-data { font-size: .75rem; font-weight: 700; color: var(--azul-forte); }
+.dica-fase p { margin: 6px 0 0; }
+
 @media (max-width: 360px) {
+  .rapidos { grid-template-columns: 1fr; }
   .timer-tempo { font-size: 2.2rem; }
   .numeros { grid-template-columns: repeat(2, 1fr); }
 }

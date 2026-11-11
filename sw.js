@@ -2,12 +2,16 @@
  * Guarda os arquivos do app para abrir sem internet.
  * Ao publicar uma versão nova, aumente o número em VERSAO.
  */
-const VERSAO = 'rotina-bento-v1';
+const VERSAO = 'rotina-bento-v2';
 const ARQUIVOS = [
   './',
   './index.html',
-  './app.css',
-  './app.js',
+  './app.css?v=2',
+  './app.js?v=2',
+  './sono.js?v=2',
+  './agenda.js?v=2',
+  './marcos.js?v=2',
+  './extras.js?v=2',
   './manifest.webmanifest',
   './icons/apple-touch-icon.png',
   './icons/icon-192.png',

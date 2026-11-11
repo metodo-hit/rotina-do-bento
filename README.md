@@ -2,13 +2,21 @@
 
 App para registrar mamadas, sono, fraldas e outras informações do Bento. Funciona no iPhone como um app instalado na tela inicial, sem custo.
 
-- **Mamada:** cronômetro por lado (esquerdo/direito), botão de trocar de lado, mamadeira com ml e horário sugerido da próxima mamada.
-- **Sono:** soneca ou sono da noite, com cronômetro e o tempo acordado desde o último sono.
-- **Fralda:** xixi e fralda seca em um toque; cocô com a cor.
-- **Mais:** ordenha, tempo de barriga, temperatura, peso, altura, perímetro cefálico, remédio, banho e anotações.
-- **Resumo:** números do dia, linha das 24 horas, últimos 7 dias, sono por dia e crescimento.
+- **Hoje:** ruído branco e timer rápido no topo, cronômetros, última mamada, próxima janela de soneca, última fralda, compromissos e números do dia.
+- **Sono:** previsão de quanto a soneca deve durar, hora de começar a preparar a próxima, programação do dia, análise de 7 ou 14 dias e insights a partir de 10 dias de registros.
+- **Agenda:** calendário com consultas, vacinas, exames e datas especiais; mesversários automáticos; vacinas do calendário do SUS; lembretes no app e exportação para o calendário do celular.
+- **Marcos:** fases de desenvolvimento por idade com marcos para marcar a data em que o Bento conseguiu, mais conquistas próprias.
+- **Mamada, fralda e mais:** cronômetro por lado, mamadeira em ml, cocô com a cor, ordenha, tempo de barriga, temperatura, peso, altura, perímetro cefálico, remédio, banho e anotações.
 - **Sem internet:** registra mesmo offline e envia quando a conexão voltar.
 - **Pai e mãe juntos:** os dois celulares usam a mesma planilha.
+
+## De onde vêm as referências
+
+- **Sono:** totais recomendados da National Sleep Foundation (2015) e da Academia Americana de Medicina do Sono (2016). Janelas de vigília e duração de soneca são um consenso prático usado por pediatras e consultoras de sono, com variação grande entre bebês. Com 10 dias de registros, as previsões passam a usar a mediana das sonecas do Bento no mesmo horário.
+- **Vacinas:** Calendário Nacional de Vacinação do Ministério da Saúde. Ele muda com o tempo: confirme na Caderneta da Criança ou no posto.
+- **Marcos:** textos próprios baseados na Caderneta da Criança (Ministério da Saúde) e no programa "Learn the Signs. Act Early" do CDC.
+
+Nada no app substitui a orientação do pediatra.
 
 ## Como funciona
 
@@ -23,7 +31,11 @@ O código deste repositório é público. Os dados ficam só na planilha, na con
 
 | Arquivo | Para que serve |
 |---|---|
-| `index.html`, `app.css`, `app.js` | O app |
+| `index.html`, `app.css`, `app.js` | O app (núcleo, telas Hoje, Histórico, Resumo e Ajustes, sincronização) |
+| `sono.js` | Previsões de soneca, programação do dia, análise e insights |
+| `agenda.js` | Calendário, mesversários, vacinas e lembretes |
+| `marcos.js` | Fases e marcos de desenvolvimento |
+| `extras.js` | Ruído branco e timer rápido |
 | `manifest.webmanifest`, `icons/` | Nome, cores e ícone quando instalado |
 | `sw.js` | Faz o app abrir sem internet |
 | `apps-script/Codigo.gs` | Código que vai dentro da planilha (passo 1) |
@@ -77,6 +89,7 @@ Na planilha, aba **Bebê**, preencha as células amarelas:
 - **Data de nascimento** (para o app mostrar a idade).
 - **Intervalo entre mamadas (horas)**: usado para "Próxima por volta das…". Padrão: 3.
 - **Início e fim do sono noturno**: separam soneca de sono da noite. Padrão: 19h às 7h.
+- **Hora alvo para dormir à noite**: usada na programação das sonecas e no horário limite da última soneca. Aceita meia hora (22,5 = 22h30).
 
 ## A planilha
 
@@ -84,6 +97,8 @@ Na planilha, aba **Bebê**, preencha as células amarelas:
 |---|---|
 | **Registros** | Uma linha por registro. Colunas A a O são gravadas pelo app; P (Duração) e Q (Data) são fórmulas. |
 | **Resumo** | Últimos 14 dias: mamadas, intervalo médio, sonecas, horas de sono, fraldas. Atualiza sozinho. |
+| **Agenda** | Compromissos, consultas e vacinas criados no app. |
+| **Marcos** | Marcos de desenvolvimento conquistados, com a data. |
 | **Bebê** | Configurações que o app lê. |
 
 - **Corrigir algo na planilha:** pode editar direto na aba Registros. A mudança chega aos celulares na próxima sincronização.

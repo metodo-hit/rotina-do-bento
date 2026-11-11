@@ -1,25 +1,36 @@
-/* Rotina do Bento
- * App de registro de mamadas, sono, fraldas e mais.
- * Os dados ficam no celular (localStorage) e são sincronizados com a planilha
+/* Rotina do Bento: núcleo do app
+ * Registro de mamadas, sono, fraldas e mais, com sincronização com a planilha
  * do Google via Apps Script. Funciona sem internet: o que for registrado
  * offline é enviado quando a conexão voltar.
+ *
+ * Os módulos sono.js, agenda.js, marcos.js e extras.js são carregados antes
+ * deste arquivo e registram telas e ações em window.RB.
  */
 'use strict';
 (function () {
 
-  const VERSAO = '1.0.0';
+  const RB = window.RB = window.RB || {};
+  RB.telas = RB.telas || {};
+  RB.acoes = RB.acoes || {};
+  RB.aoTique = RB.aoTique || [];
+
+  const VERSAO = '2.0.0';
 
   /* =====================================================================
    * Armazenamento local
    * ===================================================================== */
 
+  const COLECOES = ['registros', 'agenda', 'marcos'];
   const CH = {
     registros: 'rb:registros',
+    agenda: 'rb:agenda',
+    marcos: 'rb:marcos',
     pendentes: 'rb:pendentes',
     desde: 'rb:desde',
     ajustes: 'rb:ajustes',
     bebe: 'rb:bebe',
-    ultimaSync: 'rb:ultimaSync'
+    ultimaSync: 'rb:ultimaSync',
+    versaoPlanilha: 'rb:versaoPlanilha'
   };
 
   function ler(chave, padrao) {
@@ -32,20 +43,29 @@
     try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (e) { /* armazenamento indisponível */ }
   }
 
+  // Versão 1 guardava os pendentes só como id de registro; agora é "colecao:id".
+  const pendentesSalvos = ler(CH.pendentes, []).map((p) => (String(p).indexOf(':') >= 0 ? p : 'registros:' + p));
+
   const estado = {
-    registros: ler(CH.registros, {}),
-    pendentes: new Set(ler(CH.pendentes, [])),
+    dados: {
+      registros: ler(CH.registros, {}),
+      agenda: ler(CH.agenda, {}),
+      marcos: ler(CH.marcos, {})
+    },
+    pendentes: new Set(pendentesSalvos),
     desde: ler(CH.desde, null),
     ajustes: Object.assign({ url: '', codigo: '', quem: '', tema: 'auto' }, ler(CH.ajustes, {})),
-    bebe: Object.assign({ nome: 'Bento', nascimento: null, intervaloMamadasH: 3, noturnoInicio: 19, noturnoFim: 7 }, ler(CH.bebe, {})),
+    bebe: Object.assign({ nome: 'Bento', nascimento: null, intervaloMamadasH: 3, noturnoInicio: 19, noturnoFim: 7, horaDormir: null }, ler(CH.bebe, {})),
+    versaoPlanilha: ler(CH.versaoPlanilha, null),
     aba: 'hoje',
     filtro: 'Todos',
     diasHistorico: 7,
     sync: { estado: 'desconfigurado', erro: null, ultima: ler(CH.ultimaSync, null) }
   };
+  RB.estado = estado;
 
   function persistir() {
-    gravar(CH.registros, estado.registros);
+    COLECOES.forEach((c) => gravar(CH[c], estado.dados[c]));
     gravar(CH.pendentes, Array.from(estado.pendentes));
     gravar(CH.desde, estado.desde);
   }
@@ -81,6 +101,10 @@
   };
 
   function nomeTipo(tipo) { return (TIPOS[tipo] && TIPOS[tipo].nome) || tipo; }
+  function rotuloRegistro(r) {
+    if (r.tipo === 'Sono') return r.detalhe === 'Sono noturno' ? 'Sono da noite' : 'Soneca';
+    return nomeTipo(r.tipo);
+  }
   function iconeTipo(tipo) { return (TIPOS[tipo] && TIPOS[tipo].icone) || '•'; }
 
   /* =====================================================================
@@ -90,6 +114,8 @@
   const p2 = (n) => String(n).padStart(2, '0');
   const ms = (iso) => (iso ? new Date(iso).getTime() : 0);
   const agoraISO = () => new Date().toISOString();
+  const M = 60000;
+  const H = 3600000;
   const DIA = 86400000;
 
   const fmtHora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -97,18 +123,20 @@
   const fmtDiaCurto = new Intl.DateTimeFormat('pt-BR', { weekday: 'short', day: '2-digit' });
   const fmtDataHora = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   const fmtData = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const fmtDiaMes = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' });
 
   function hora(iso) { return iso ? fmtHora.format(new Date(iso)) : ''; }
+  function horaMs(t) { return fmtHora.format(new Date(t)); }
 
   function duracao(msv) {
-    const min = Math.round(msv / 60000);
+    const min = Math.round(msv / M);
     if (min < 1) return 'menos de 1 min';
     if (min < 60) return min + ' min';
     const h = Math.floor(min / 60), m = min % 60;
     return m ? h + 'h ' + m + 'min' : h + 'h';
   }
   function duracaoCurta(msv) {
-    const min = Math.round(msv / 60000);
+    const min = Math.round(msv / M);
     if (min < 1) return '<1 min';
     if (min < 60) return min + ' min';
     const h = Math.floor(min / 60), m = min % 60;
@@ -121,7 +149,7 @@
   }
   function ha(iso) {
     const d = Date.now() - ms(iso);
-    if (d < 60000) return 'agora há pouco';
+    if (d < M) return 'agora há pouco';
     return 'há ' + duracao(d);
   }
 
@@ -136,6 +164,7 @@
     const hoje = chaveDia(new Date());
     if (chave === hoje) return 'Hoje';
     if (chave === chaveDia(somarDias(new Date(), -1))) return 'Ontem';
+    if (chave === chaveDia(somarDias(new Date(), 1))) return 'Amanhã';
     return fmtDiaSemana.format(dataDaChave(chave));
   }
 
@@ -173,10 +202,21 @@
     return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   }
 
-  function idade(nascimento) {
-    if (!nascimento) return '';
-    const [a, m, d] = nascimento.split('-').map(Number);
-    const nasc = new Date(a, m - 1, d);
+  function nascimentoData() {
+    if (!estado.bebe.nascimento) return null;
+    const [a, m, d] = estado.bebe.nascimento.split('-').map(Number);
+    return new Date(a, m - 1, d);
+  }
+  function semanasDeVida(em) {
+    const n = nascimentoData();
+    if (!n) return null;
+    return Math.max(0, (inicioDia(em || new Date()) - n) / (7 * DIA));
+  }
+
+  function idade() {
+    const nasc = nascimentoData();
+    if (!nasc) return '';
+    const a = nasc.getFullYear(), m = nasc.getMonth() + 1, d = nasc.getDate();
     const hoje = inicioDia(new Date());
     const dias = Math.round((hoje - nasc) / DIA);
     if (dias < 0) return '';
@@ -204,7 +244,7 @@
    * ===================================================================== */
 
   function ativos() {
-    return Object.values(estado.registros).filter((r) => r && !r.excluido && r.inicio);
+    return Object.values(estado.dados.registros).filter((r) => r && !r.excluido && r.inicio);
   }
   function ordenados() {
     return ativos().sort((a, b) => ms(b.inicio) - ms(a.inicio));
@@ -246,7 +286,6 @@
       sonecas: sonecas.length,
       tempoSoneca: soma(sonecas),
       tempoNoturno: soma(noturnos),
-      // sono que de fato aconteceu dentro do dia (corta o que passou da meia-noite)
       sonoNoDia: todos.filter((r) => r.tipo === 'Sono').reduce((t, r) => t + sobreposicao(r, ini, fim), 0),
       fraldas: fraldas.length,
       cocos: fraldas.filter((r) => /coc[oô]/i.test(r.detalhe || '')).length,
@@ -290,46 +329,46 @@
   }
 
   /* =====================================================================
-   * Gravação de registros
+   * Gravação
    * ===================================================================== */
 
-  function salvarRegistro(r) {
+  function salvarItem(colecao, item) {
     const agora = agoraISO();
-    r.id = r.id || novoId();
-    r.criadoEm = r.criadoEm || agora;
-    r.atualizadoEm = agora;
-    r.quem = r.quem || estado.ajustes.quem || null;
-    r.excluido = !!r.excluido;
-    estado.registros[r.id] = r;
-    estado.pendentes.add(r.id);
+    item.id = item.id || novoId();
+    item.criadoEm = item.criadoEm || agora;
+    item.atualizadoEm = agora;
+    item.quem = item.quem || estado.ajustes.quem || null;
+    item.excluido = !!item.excluido;
+    estado.dados[colecao][item.id] = item;
+    estado.pendentes.add(colecao + ':' + item.id);
     persistir();
     render();
     agendarSync();
-    return r;
+    return item;
   }
+  function salvarRegistro(r) { return salvarItem('registros', r); }
 
   function iniciarTimer(tipo, detalhe) {
     const jaTem = emAndamento().find((r) => r.tipo === tipo);
     if (jaTem) { avisar('Já existe ' + nomeTipo(tipo).toLowerCase() + ' em andamento.'); return null; }
     const r = salvarRegistro({ tipo: tipo, inicio: agoraISO(), fim: null, detalhe: detalhe || null });
-    avisar(nomeTipo(tipo) + ' iniciada às ' + hora(r.inicio) + '.');
+    avisar(rotuloRegistro(r) + ': início às ' + hora(r.inicio) + '.');
     return r;
   }
 
   function finalizarTimer(id) {
-    const r = estado.registros[id];
+    const r = estado.dados.registros[id];
     if (!r || r.fim) return;
     r.fim = agoraISO();
     salvarRegistro(r);
-    avisar(nomeTipo(r.tipo) + ' finalizada: ' + duracao(ms(r.fim) - ms(r.inicio)) + '.');
-    // Mamadeira e ordenha pedem a quantidade em ml
+    avisar(rotuloRegistro(r) + ': ' + duracao(ms(r.fim) - ms(r.inicio)) + '.');
     if ((r.tipo === 'Mamada' && r.detalhe === 'Mamadeira') || r.tipo === 'Ordenha') {
       abrirFormulario(r.tipo, r.id, { focar: 'quantidade' });
     }
   }
 
   function trocarLado(id) {
-    const r = estado.registros[id];
+    const r = estado.dados.registros[id];
     if (!r || r.fim) return;
     const comecou = r.detalhe === 'Peito esquerdo' ? 'esquerdo' : 'direito';
     r.detalhe = 'Ambos os peitos';
@@ -339,11 +378,11 @@
   }
 
   function excluirRegistro(id) {
-    const r = estado.registros[id];
+    const r = estado.dados.registros[id];
     if (!r) return;
     r.excluido = true;
     salvarRegistro(r);
-    avisar(nomeTipo(r.tipo) + ' excluída.');
+    avisar('Registro excluído.');
   }
 
   /* =====================================================================
@@ -393,24 +432,30 @@
     }
   }
 
-  function normalizar(r) {
-    return {
-      id: String(r.id),
-      tipo: r.tipo || null,
-      inicio: r.inicio || null,
-      fim: r.fim || null,
-      detalhe: r.detalhe || null,
-      leite: r.leite || null,
-      quantidade: r.quantidade === null || r.quantidade === undefined || r.quantidade === '' ? null : Number(r.quantidade),
-      unidade: r.unidade || null,
-      corCoco: r.corCoco || null,
-      quem: r.quem || null,
-      obs: r.obs ? String(r.obs) : null,
-      criadoEm: r.criadoEm || null,
-      atualizadoEm: r.atualizadoEm || null,
+  const vazio = (v) => v === null || v === undefined || v === '';
+  const NORMALIZAR = {
+    registros: (r) => ({
+      id: String(r.id), tipo: r.tipo || null, inicio: r.inicio || null, fim: r.fim || null,
+      detalhe: r.detalhe || null, leite: r.leite || null,
+      quantidade: vazio(r.quantidade) ? null : Number(r.quantidade),
+      unidade: r.unidade || null, corCoco: r.corCoco || null, quem: r.quem || null,
+      obs: r.obs ? String(r.obs) : null, criadoEm: r.criadoEm || null, atualizadoEm: r.atualizadoEm || null,
       excluido: r.excluido === true
-    };
-  }
+    }),
+    agenda: (r) => ({
+      id: String(r.id), titulo: r.titulo ? String(r.titulo) : '', categoria: r.categoria || 'Outro',
+      inicio: r.inicio || null, fim: r.fim || null, diaInteiro: r.diaInteiro === true,
+      local: r.local ? String(r.local) : null, obs: r.obs ? String(r.obs) : null,
+      lembreteMin: vazio(r.lembreteMin) ? null : Number(r.lembreteMin),
+      concluido: r.concluido === true, quem: r.quem || null,
+      criadoEm: r.criadoEm || null, atualizadoEm: r.atualizadoEm || null, excluido: r.excluido === true
+    }),
+    marcos: (r) => ({
+      id: String(r.id), fase: r.fase || null, marco: r.marco ? String(r.marco) : '', categoria: r.categoria || null,
+      data: r.data || null, obs: r.obs ? String(r.obs) : null, quem: r.quem || null,
+      criadoEm: r.criadoEm || null, atualizadoEm: r.atualizadoEm || null, excluido: r.excluido === true
+    })
+  };
 
   async function sincronizar() {
     if (!configurado()) { definirStatus('desconfigurado'); return; }
@@ -419,26 +464,38 @@
     syncEmCurso = true;
     definirStatus('sincronizando');
 
-    const enviados = Array.from(estado.pendentes)
-      .map((id) => estado.registros[id])
-      .filter(Boolean)
-      .map((r) => Object.assign({}, r));
+    const corpo = { acao: 'sync', desde: estado.desde };
+    const enviados = [];
+    COLECOES.forEach((c) => { corpo[c] = []; });
+    Array.from(estado.pendentes).forEach((chave) => {
+      const i = chave.indexOf(':');
+      const c = chave.slice(0, i), id = chave.slice(i + 1);
+      const item = estado.dados[c] && estado.dados[c][id];
+      if (!item) { estado.pendentes.delete(chave); return; }
+      const copia = Object.assign({}, item);
+      corpo[c].push(copia);
+      enviados.push({ c: c, item: copia });
+    });
 
     try {
-      const dados = await chamarApi({ acao: 'sync', desde: estado.desde, registros: enviados });
+      const dados = await chamarApi(corpo);
+      estado.versaoPlanilha = dados.versao || 1;
+      gravar(CH.versaoPlanilha, estado.versaoPlanilha);
 
-      // Tira da fila o que foi enviado e não mudou durante o envio.
-      enviados.forEach((r) => {
-        const atual = estado.registros[r.id];
-        if (!atual || atual.atualizadoEm === r.atualizadoEm) estado.pendentes.delete(r.id);
+      // Só tira da fila o que a planilha confirmou (a versão 1 do script só conhece "registros").
+      enviados.forEach(({ c, item }) => {
+        if (!Array.isArray(dados[c])) return;
+        const atual = estado.dados[c][item.id];
+        if (!atual || atual.atualizadoEm === item.atualizadoEm) estado.pendentes.delete(c + ':' + item.id);
       });
 
-      // Aplica o que veio da planilha, sem passar por cima de mudança local mais nova.
-      (dados.registros || []).forEach((rr) => {
-        const r = normalizar(rr);
-        const local = estado.registros[r.id];
-        if (local && estado.pendentes.has(r.id) && ms(local.atualizadoEm) > ms(r.atualizadoEm)) return;
-        estado.registros[r.id] = r;
+      COLECOES.forEach((c) => {
+        (dados[c] || []).forEach((bruto) => {
+          const r = NORMALIZAR[c](bruto);
+          const local = estado.dados[c][r.id];
+          if (local && estado.pendentes.has(c + ':' + r.id) && ms(local.atualizadoEm) > ms(r.atualizadoEm)) return;
+          estado.dados[c][r.id] = r;
+        });
       });
 
       estado.desde = dados.agora || estado.desde;
@@ -485,6 +542,7 @@
    * ===================================================================== */
 
   const $conteudo = document.getElementById('conteudo');
+  const ABA_NAV = { historico: 'mais', resumo: 'mais', ajustes: 'mais' };
 
   function aplicarTema() {
     const t = estado.ajustes.tema;
@@ -497,7 +555,7 @@
     const nome = estado.bebe.nome || 'Bento';
     document.getElementById('titulo').textContent = 'Rotina do ' + nome;
     document.title = 'Rotina do ' + nome;
-    document.getElementById('idade').textContent = idade(estado.bebe.nascimento);
+    document.getElementById('idade').textContent = idade();
   }
 
   let avisoTimer = null;
@@ -511,18 +569,26 @@
 
   function irPara(aba) {
     estado.aba = aba;
-    document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === aba));
+    const nav = ABA_NAV[aba] || aba;
+    document.querySelectorAll('.abas button').forEach((b) => b.classList.toggle('ativa', b.dataset.aba === nav));
     render();
     window.scrollTo(0, 0);
   }
 
   function render() {
     atualizarTopo();
-    if (estado.aba === 'hoje') $conteudo.innerHTML = telaHoje();
-    else if (estado.aba === 'historico') $conteudo.innerHTML = telaHistorico();
-    else if (estado.aba === 'resumo') $conteudo.innerHTML = telaResumo();
-    else if (estado.aba === 'ajustes') { $conteudo.innerHTML = telaAjustes(); atualizarAjustesSync(); }
+    const a = estado.aba;
+    if (a === 'hoje') $conteudo.innerHTML = telaHoje();
+    else if (a === 'historico') $conteudo.innerHTML = voltar() + telaHistorico();
+    else if (a === 'resumo') $conteudo.innerHTML = voltar() + telaResumo();
+    else if (a === 'ajustes') { $conteudo.innerHTML = voltar() + telaAjustes(); atualizarAjustesSync(); }
+    else if (a === 'mais') $conteudo.innerHTML = telaMais();
+    else if (RB.telas[a]) $conteudo.innerHTML = RB.telas[a]();
     tique();
+  }
+
+  function voltar() {
+    return '<button type="button" class="voltar" data-acao="ir" data-aba="mais">‹ Mais</button>';
   }
 
   // Atualiza cronômetros e "há X min" a cada segundo, sem redesenhar a tela.
@@ -534,6 +600,11 @@
     document.querySelectorAll('[data-ha]').forEach((el) => {
       el.textContent = ha(el.dataset.ha);
     });
+    document.querySelectorAll('[data-ate]').forEach((el) => {
+      const falta = Number(el.dataset.ate) - agora;
+      el.textContent = falta > 0 ? cronometro(falta) : '00:00';
+    });
+    RB.aoTique.forEach((f) => { try { f(agora); } catch (e) { /* módulo com erro não derruba o app */ } });
   }
 
   /* =====================================================================
@@ -542,6 +613,7 @@
 
   function telaHoje() {
     let h = '';
+    if (RB.barraRapida) h += RB.barraRapida();
 
     if (!configurado()) {
       h += '<div class="cartao" style="margin-bottom:10px">' +
@@ -550,25 +622,25 @@
         '<button class="botao secundario" style="margin-top:10px" data-acao="ir" data-aba="ajustes">Conectar planilha</button>' +
         '</div>';
     }
+    if (RB.avisosHoje) h += RB.avisosHoje();
 
     emAndamento().forEach((r) => { h += cartaoTimer(r); });
 
-    // Destaques
     h += '<div class="secao-titulo">Agora</div>';
     h += destaqueMamada();
     h += destaqueSono();
     h += destaqueFralda();
 
-    // Ações rápidas
     const dormindo = emAndamento().some((r) => r.tipo === 'Sono');
     h += '<div class="secao-titulo">Registrar</div><div class="acoes">' +
       botaoAcao('mamada', '🍼', 'Mamada', 'Peito ou mamadeira', 'laranja') +
       botaoAcao('sono', '🌙', 'Sono', dormindo ? 'Dormindo agora' : (ehNoturno(new Date()) ? 'Sono da noite' : 'Soneca'), 'azul') +
       botaoAcao('fralda', '🧷', 'Fralda', 'Xixi, cocô ou seca', '') +
-      botaoAcao('mais', '➕', 'Mais', 'Ordenha, remédio, peso…', '') +
+      botaoAcao('mais-registros', '➕', 'Mais', 'Ordenha, remédio, peso…', '') +
       '</div>';
 
-    // Números de hoje
+    if (RB.proximosCompromissos) h += RB.proximosCompromissos();
+
     const hoje = resumoDia(new Date());
     h += '<div class="secao-titulo">Hoje</div><div class="cartao">' +
       '<div class="numeros">' +
@@ -583,11 +655,11 @@
       faixa24h() +
       '</div>';
 
-    // Últimos registros
     const ultimos = ordenados().slice(0, 5);
     h += '<div class="secao-titulo">Últimos registros</div>';
     h += ultimos.length
-      ? '<ul class="lista">' + ultimos.map(itemLista).join('') + '</ul>'
+      ? '<ul class="lista">' + ultimos.map(itemLista).join('') + '</ul>' +
+        '<button type="button" class="botao secundario" style="margin-top:10px" data-acao="ir" data-aba="historico">Ver histórico completo</button>'
       : '<div class="cartao vazio">Nenhum registro ainda. Comece pela primeira mamada.</div>';
 
     return h;
@@ -611,10 +683,12 @@
     if (r.tipo === 'Ordenha') rotulo = 'Ordenhando';
     const detalhe = [r.detalhe && r.tipo !== 'Sono' ? r.detalhe : '', 'desde ' + hora(r.inicio)].filter(Boolean).join(' · ');
     const podeTrocar = r.tipo === 'Mamada' && (r.detalhe === 'Peito esquerdo' || r.detalhe === 'Peito direito');
+    const extra = r.tipo === 'Sono' && RB.linhaPrevisaoSoneca ? RB.linhaPrevisaoSoneca(r) : '';
     return '<div class="timer" data-tipo="' + esc(r.tipo) + '">' +
       '<div class="timer-topo"><span class="timer-rotulo">' + iconeTipo(r.tipo) + ' ' + esc(rotulo) + '</span>' +
       '<span class="timer-detalhe">' + esc(detalhe) + '</span></div>' +
       '<div class="timer-tempo" data-desde="' + esc(r.inicio) + '">00:00</div>' +
+      extra +
       '<div class="timer-acoes">' +
       (podeTrocar ? '<button type="button" data-acao="trocar-lado" data-id="' + esc(r.id) + '">Trocar lado</button>' : '') +
       '<button type="button" data-acao="editar" data-id="' + esc(r.id) + '">Editar</button>' +
@@ -628,15 +702,15 @@
     if (!r) {
       return cartaoDestaque('🍼', '', 'Última mamada', 'Sem registro', 'Registre a primeira mamada abaixo.', '');
     }
-    const intervalo = (Number(estado.bebe.intervaloMamadasH) || 3) * 3600000;
+    const intervalo = (Number(estado.bebe.intervaloMamadasH) || 3) * H;
     const proxima = ms(r.inicio) + intervalo;
     let etiqueta = '';
     if (!r.fim) {
       etiqueta = '<span class="etiqueta alerta">Mamando agora</span>';
     } else if (Date.now() > proxima) {
-      etiqueta = '<span class="etiqueta alerta">Passou ' + duracao(Date.now() - proxima) + ' do horário sugerido (' + hora(new Date(proxima).toISOString()) + ')</span>';
+      etiqueta = '<span class="etiqueta alerta">Passou ' + duracao(Date.now() - proxima) + ' do horário sugerido (' + horaMs(proxima) + ')</span>';
     } else {
-      etiqueta = '<span class="etiqueta">Próxima por volta das ' + hora(new Date(proxima).toISOString()) + '</span>';
+      etiqueta = '<span class="etiqueta">Próxima por volta das ' + horaMs(proxima) + '</span>';
     }
     let lado = '';
     if (r.detalhe === 'Ambos os peitos' && /Começou no peito (esquerdo|direito)/.test(r.obs || '')) {
@@ -652,6 +726,7 @@
 
   function destaqueSono() {
     if (emAndamento().some((r) => r.tipo === 'Sono')) return '';
+    if (RB.cartaoSonoHoje) return RB.cartaoSonoHoje();
     const r = ultimo('Sono', (x) => !!x.fim);
     if (!r) return cartaoDestaque('🌙', 'azul', 'Acordado', 'Sem registro de sono', 'Toque em Sono quando ele dormir.', '');
     const info = 'Último sono: ' + hora(r.inicio) + '–' + hora(r.fim) + ' (' + duracao(ms(r.fim) - ms(r.inicio)) + ')';
@@ -666,7 +741,7 @@
   }
 
   function cartaoDestaque(icone, cor, rotulo, valorHtml, info, extra, id) {
-    const abre = id ? '<button type="button" class="cartao destaque" data-acao="editar" data-id="' + esc(id) + '" style="width:100%;text-align:left;font:inherit">' : '<div class="cartao destaque">';
+    const abre = id ? '<button type="button" class="cartao destaque" data-acao="editar" data-id="' + esc(id) + '">' : '<div class="cartao destaque">';
     const fecha = id ? '</button>' : '</div>';
     return abre +
       '<div class="destaque-icone ' + cor + '" aria-hidden="true">' + icone + '</div>' +
@@ -711,8 +786,27 @@
       '<span class="item-corpo"><span class="item-titulo">' + esc(nomeTipo(r.tipo)) + '</span>' +
       '<span class="item-sub" style="display:block">' + esc(descrever(r)) + '</span></span>' +
       (dur ? '<span class="item-dur">' + esc(dur) + '</span>' : '') +
-      (estado.pendentes.has(r.id) ? '<span class="item-pendente" title="Ainda não enviado à planilha"></span>' : '') +
+      (estado.pendentes.has('registros:' + r.id) ? '<span class="item-pendente" title="Ainda não enviado à planilha"></span>' : '') +
       '</button></li>';
+  }
+
+  /* =====================================================================
+   * Tela: Mais
+   * ===================================================================== */
+
+  function telaMais() {
+    const item = (aba, icone, nome, sub) =>
+      '<li><button type="button" class="item" data-acao="ir" data-aba="' + aba + '">' +
+      '<span class="item-icone" aria-hidden="true">' + icone + '</span>' +
+      '<span class="item-corpo"><span class="item-titulo">' + nome + '</span>' +
+      '<span class="item-sub" style="display:block">' + sub + '</span></span>' +
+      '<span class="item-dur">›</span></button></li>';
+    return '<div class="secao-titulo">Mais</div><ul class="lista">' +
+      item('historico', '📋', 'Histórico', 'Todos os registros, dia a dia') +
+      item('resumo', '📊', 'Resumo', 'Últimos 7 dias, médias e crescimento') +
+      item('ajustes', '⚙️', 'Ajustes', 'Planilha, quem usa o celular, tema') +
+      '</ul>' +
+      '<p class="rodape">Rotina do Bento · versão ' + VERSAO + '</p>';
   }
 
   /* =====================================================================
@@ -771,21 +865,8 @@
         '<td>' + s.sonecas + (s.tempoSoneca ? ' <small>(' + duracaoCurta(s.tempoSoneca) + ')</small>' : '') + '</td>' +
         '<td>' + s.fraldas + '</td></tr>';
     });
-    h += '</tbody></table><p class="dica">Intervalo: tempo médio entre o início de uma mamada e o da seguinte.</p></div>';
+    h += '</tbody></table><p class="dica">Intervalo: tempo médio entre o início de uma mamada e o da seguinte. A análise do sono fica na aba Sono.</p></div>';
 
-    // Sono por dia
-    const maxSono = Math.max(1, ...resumos.map(({ s }) => s.tempoSoneca + s.tempoNoturno));
-    h += '<div class="secao-titulo">Sono por dia</div><div class="cartao"><div class="barras">';
-    resumos.forEach(({ dia, s }, i) => {
-      const total = s.tempoSoneca + s.tempoNoturno;
-      h += '<div class="barra-linha"><span>' + esc(i === 0 ? 'Hoje' : fmtDiaCurto.format(dia)) + '</span>' +
-        '<div class="barra"><i class="soneca" style="width:' + (s.tempoSoneca / maxSono * 100) + '%"></i>' +
-        '<i class="noturno" style="width:' + (s.tempoNoturno / maxSono * 100) + '%"></i></div>' +
-        '<span class="barra-valor">' + (total ? duracaoCurta(total) : '–') + '</span></div>';
-    });
-    h += '</div><div class="legenda"><span class="l-sono">Sonecas</span><span class="l-noite">Sono da noite</span></div></div>';
-
-    // Médias
     const comDados = resumos.slice(1).filter(({ s }) => s.mamadas || s.sonecas || s.fraldas);
     if (comDados.length) {
       const media = (f) => comDados.reduce((t, { s }) => t + f(s), 0) / comDados.length;
@@ -796,7 +877,6 @@
         '</div><p class="dica" style="text-align:center">Com base em ' + comDados.length + (comDados.length === 1 ? ' dia' : ' dias') + ' anteriores a hoje.</p></div>';
     }
 
-    // Crescimento
     const medidas = ['Peso', 'Altura', 'Perímetro cefálico'].map((t) => ultimo(t)).filter(Boolean);
     h += '<div class="secao-titulo">Crescimento</div><div class="cartao">';
     if (medidas.length) {
@@ -821,7 +901,11 @@
     const b = estado.bebe;
     const quemOpcoes = ['Mãe', 'Pai'];
     const quemOutro = a.quem && !quemOpcoes.includes(a.quem);
-    return '' +
+    const avisoVersao = configurado() && estado.versaoPlanilha === 1
+      ? '<div class="cartao alerta-cartao" style="margin-bottom:10px"><b>Atualize o script da planilha.</b>' +
+        '<p class="dica">A agenda e os marcos ficam guardados neste celular, mas só vão para a planilha (e para o outro celular) depois que o novo código do Apps Script for implantado.</p></div>'
+      : '';
+    return avisoVersao +
       '<div class="secao-titulo">Conexão com a planilha</div><div class="cartao">' +
       '<div class="campo"><label for="aj-url">URL do app da Web (Apps Script)</label>' +
       '<input id="aj-url" class="entrada" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(a.url) + '"></div>' +
@@ -851,19 +935,21 @@
       '<div class="config-linha"><span>Nascimento</span><span>' + (b.nascimento ? fmtData.format(dataDaChave(b.nascimento)) : 'não informado') + '</span></div>' +
       '<div class="config-linha"><span>Intervalo entre mamadas</span><span>' + numero(b.intervaloMamadasH, 1) + ' h</span></div>' +
       '<div class="config-linha"><span>Sono da noite</span><span>das ' + b.noturnoInicio + 'h às ' + b.noturnoFim + 'h</span></div>' +
+      '<div class="config-linha"><span>Hora alvo para dormir</span><span>' + (vazio(b.horaDormir) ? 'pela idade' : numero(b.horaDormir, 2) + 'h') + '</span></div>' +
       '<p class="dica">Para mudar, edite a aba "Bebê" da planilha. O app atualiza na próxima sincronização.</p></div>' +
 
       '<div class="secao-titulo">Sincronização</div><div class="cartao">' +
       '<div class="config-linha"><span>Situação</span><span id="aj-sync-estado"></span></div>' +
       '<div class="config-linha"><span>Última sincronização</span><span id="aj-sync-ultima"></span></div>' +
       '<div class="config-linha"><span>Aguardando envio</span><span id="aj-sync-pendentes"></span></div>' +
+      '<div class="config-linha"><span>Versão do script</span><span>' + (estado.versaoPlanilha || '–') + '</span></div>' +
       '<p id="aj-sync-erro" class="dica alerta" hidden></p>' +
       '<button type="button" class="botao" style="margin-top:12px" data-acao="sincronizar">Sincronizar agora</button>' +
       '<button type="button" class="botao secundario" data-acao="baixar-tudo">Baixar tudo da planilha de novo</button>' +
       '</div>' +
 
       '<div class="secao-titulo">Este celular</div><div class="cartao">' +
-      '<p class="dica" style="margin-top:0">Apaga os registros guardados neste celular. O que já está na planilha continua lá e volta na próxima sincronização.</p>' +
+      '<p class="dica" style="margin-top:0">Apaga os dados guardados neste celular. O que já está na planilha continua lá e volta na próxima sincronização.</p>' +
       '<button type="button" class="botao perigo" style="margin-top:10px" data-acao="limpar-local">Apagar dados deste celular</button>' +
       '</div>' +
       '<p class="rodape">Rotina do Bento · versão ' + VERSAO + '</p>';
@@ -899,8 +985,10 @@
       estado.ajustes.url = url;
       estado.ajustes.codigo = codigo;
       gravar(CH.ajustes, estado.ajustes);
-      if (mudouUrl) estado.desde = null; // planilha nova: baixa tudo
+      if (mudouUrl) estado.desde = null;
       if (dados.config) { estado.bebe = Object.assign(estado.bebe, dados.config); gravar(CH.bebe, estado.bebe); }
+      estado.versaoPlanilha = dados.versao || 1;
+      gravar(CH.versaoPlanilha, estado.versaoPlanilha);
       persistir();
       msg.textContent = 'Conectado à planilha de ' + (estado.bebe.nome || 'Bento') + '.';
       atualizarTopo();
@@ -912,12 +1000,12 @@
   }
 
   /* =====================================================================
-   * Folha (modal) e formulários
+   * Folha (modal) e formulários de registro
    * ===================================================================== */
 
   const $folha = document.getElementById('folha');
   const $folhaConteudo = document.getElementById('folha-conteudo');
-  let form = null; // estado do formulário aberto
+  let form = null;
 
   function abrirFolha(html) {
     $folhaConteudo.innerHTML = html;
@@ -932,7 +1020,7 @@
   }
 
   function folhaMamada() {
-    const ultima = ultimo('Mamada', (r) => r.detalhe && r.detalhe.startsWith('Peito'));
+    const ultima = ultimo('Mamada', (r) => r.detalhe && (r.detalhe.startsWith('Peito') || r.detalhe === 'Ambos os peitos'));
     let dicaLado = '';
     if (ultima) {
       let lado = ultima.detalhe === 'Peito esquerdo' ? 'esquerdo' : ultima.detalhe === 'Peito direito' ? 'direito' : null;
@@ -974,15 +1062,13 @@
       '</div>');
   }
 
-  function folhaMais() {
+  function folhaMaisRegistros() {
     abrirFolha('<h2 id="folha-titulo">Registrar</h2><div class="acoes">' +
       OUTROS.map((t) => '<button type="button" class="acao" data-acao="novo" data-tipo="' + esc(t) + '">' +
         '<span class="acao-icone" aria-hidden="true">' + iconeTipo(t) + '</span>' +
         '<span class="acao-nome">' + esc(nomeTipo(t)) + '</span></button>').join('') +
       '</div>');
   }
-
-  /* --- Formulário genérico --- */
 
   function grupoOpcoes(campo, opcoes, valor) {
     return '<div class="opcoes" role="group">' + opcoes.map((o) =>
@@ -999,7 +1085,7 @@
 
   function abrirFormulario(tipo, id, opcoes) {
     opcoes = opcoes || {};
-    const existente = id ? estado.registros[id] : null;
+    const existente = id ? estado.dados.registros[id] : null;
     const r = existente ? Object.assign({}, existente) : { tipo: tipo };
     const t = TIPOS[tipo] || {};
     const agora = agoraISO();
@@ -1008,7 +1094,7 @@
       r.inicio = agora;
       if (t.intervalo) r.fim = agora;
       if (tipo === 'Mamada' && opcoes.preset === 'mamadeira') { r.detalhe = 'Mamadeira'; r.leite = 'Fórmula'; }
-      if (tipo === 'Mamada' && !r.leite) r.leite = r.leite || 'Materno';
+      if (tipo === 'Mamada' && !r.leite) r.leite = 'Materno';
       if (tipo === 'Sono') r.detalhe = ehNoturno(new Date()) ? 'Sono noturno' : 'Soneca';
       if (tipo === 'Fralda') r.detalhe = opcoes.preset || 'Xixi';
       if (tipo === 'Remédio') r.unidade = 'gotas';
@@ -1112,7 +1198,7 @@
       const v = lerNumero(q.value);
       const alerta = v && v >= 37.8;
       dicaTemp.className = 'dica' + (alerta ? ' alerta' : '');
-      dicaTemp.textContent = alerta ? 'Em recém-nascidos, 37,8 °C ou mais pede contato com o pediatra.' : '';
+      dicaTemp.textContent = alerta ? 'Em bebês pequenos, 37,8 °C ou mais pede contato com o pediatra.' : '';
     }
   }
 
@@ -1120,7 +1206,7 @@
     if (!form) return;
     const erro = document.getElementById('f-erro');
     const t = TIPOS[form.tipo] || {};
-    const base = form.id ? Object.assign({}, estado.registros[form.id]) : { tipo: form.tipo };
+    const base = form.id ? Object.assign({}, estado.dados.registros[form.id]) : { tipo: form.tipo };
 
     const inicio = deInput(document.getElementById('f-inicio').value);
     if (!inicio) { erro.textContent = 'Informe o horário.'; return; }
@@ -1136,7 +1222,7 @@
         const fim = deInput(document.getElementById('f-fim').value);
         if (!fim) { erro.textContent = 'Informe o horário do fim.'; return; }
         if (ms(fim) < ms(inicio)) { erro.textContent = 'O fim não pode ser antes do início.'; return; }
-        if (ms(fim) - ms(inicio) > 16 * 3600000) { erro.textContent = 'Duração maior que 16 horas. Confira as datas.'; return; }
+        if (ms(fim) - ms(inicio) > 16 * H) { erro.textContent = 'Duração maior que 16 horas. Confira as datas.'; return; }
         base.fim = fim;
       }
     } else {
@@ -1174,7 +1260,7 @@
     const novo = !form.id;
     salvarRegistro(base);
     fecharFolha();
-    avisar(nomeTipo(base.tipo) + (novo ? ' registrada.' : ' atualizada.'));
+    avisar(rotuloRegistro(base) + (novo ? ': registro salvo.' : ': registro atualizado.'));
   }
 
   /* =====================================================================
@@ -1191,6 +1277,8 @@
 
     const acao = alvo.dataset.acao;
     const id = alvo.dataset.id;
+    if (RB.acoes[acao]) { RB.acoes[acao](alvo, ev); return; }
+
     switch (acao) {
       case 'ir': irPara(alvo.dataset.aba); break;
       case 'mamada': folhaMamada(); break;
@@ -1200,11 +1288,11 @@
         break;
       }
       case 'fralda': folhaFralda(); break;
-      case 'mais': folhaMais(); break;
+      case 'mais-registros': folhaMaisRegistros(); break;
       case 'iniciar': fecharFolha(); iniciarTimer(alvo.dataset.tipo, alvo.dataset.detalhe); break;
       case 'novo': abrirFormulario(alvo.dataset.tipo, null, { preset: alvo.dataset.preset }); break;
       case 'editar': {
-        const r = estado.registros[id];
+        const r = estado.dados.registros[id];
         if (r) abrirFormulario(r.tipo, id);
         break;
       }
@@ -1220,7 +1308,6 @@
         if (!form) break;
         const jaMarcado = alvo.getAttribute('aria-pressed') === 'true';
         alvo.parentElement.querySelectorAll('.opcao').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-        // Tocar de novo desmarca (exceto o campo principal)
         if (jaMarcado && campo !== 'detalhe') { form.valores[campo] = null; }
         else { alvo.setAttribute('aria-pressed', 'true'); form.valores[campo] = alvo.dataset.valor; }
         atualizarCondicionais();
@@ -1271,9 +1358,9 @@
         avisar('Baixando tudo da planilha…');
         break;
       case 'limpar-local':
-        if (confirm('Apagar os registros guardados neste celular?' +
-          (estado.pendentes.size ? '\n\nAtenção: ' + estado.pendentes.size + ' registro(s) ainda não foram enviados e serão perdidos.' : ''))) {
-          estado.registros = {};
+        if (confirm('Apagar os dados guardados neste celular?' +
+          (estado.pendentes.size ? '\n\nAtenção: ' + estado.pendentes.size + ' item(ns) ainda não foram enviados e serão perdidos.' : ''))) {
+          COLECOES.forEach((c) => { estado.dados[c] = {}; });
           estado.pendentes = new Set();
           estado.desde = null;
           persistir();
@@ -1301,7 +1388,6 @@
   });
   document.getElementById('status-sync').addEventListener('click', () => irPara('ajustes'));
 
-  // Sincroniza ao voltar para o app, ao recuperar internet e a cada 30 s
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') { render(); agendarSync(100); }
   });
@@ -1309,15 +1395,32 @@
   window.addEventListener('offline', () => definirStatus('offline'));
   setInterval(() => { if (document.visibilityState === 'visible') agendarSync(0); }, 30000);
 
-  // Cronômetros: a cada segundo. Tela Hoje: redesenha a cada minuto (para "próxima mamada").
   setInterval(tique, 1000);
-  setInterval(() => { if (estado.aba === 'hoje' && document.visibilityState === 'visible') render(); }, 60000);
+  setInterval(() => {
+    const folhaAberta = !$folha.hidden;
+    if (!folhaAberta && ['hoje', 'sono'].includes(estado.aba) && document.visibilityState === 'visible') render();
+  }, 60000);
+
+  /* =====================================================================
+   * API para os módulos
+   * ===================================================================== */
+
+  Object.assign(RB, {
+    VERSAO, M, H, DIA, TIPOS,
+    ler, gravar, persistir, salvarItem, salvarRegistro, iniciarTimer, abrirFormulario,
+    ativos, ordenados, emAndamento, ultimo, fimOuAgora, sobreposicao, resumoDia,
+    ms, agoraISO, hora, horaMs, duracao, duracaoCurta, cronometro, ha, chaveDia, inicioDia, somarDias,
+    dataDaChave, rotuloDia, numero, lerNumero, esc, novoId, idade, semanasDeVida, nascimentoData, ehNoturno,
+    fmtData, fmtDiaSemana, fmtDiaCurto, fmtDiaMes, iconeTipo, nomeTipo,
+    abrirFolha, fecharFolha, avisar, render, irPara, configurado, cartaoDestaque, grupoOpcoes, p2
+  });
 
   /* =====================================================================
    * Início
    * ===================================================================== */
 
   aplicarTema();
+  if (RB.iniciarModulos) RB.iniciarModulos.forEach((f) => { try { f(); } catch (e) { /* segue */ } });
   render();
   definirStatus(configurado() ? (estado.pendentes.size ? 'pendente' : 'ok') : 'desconfigurado');
   agendarSync(200);
@@ -1326,6 +1429,5 @@
     navigator.serviceWorker.register('sw.js').catch(() => { /* sem modo offline */ });
   }
 
-  // Para testes no navegador
   window.__rotina = { estado: estado, sincronizar: sincronizar, VERSAO: VERSAO };
 })();
